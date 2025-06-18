@@ -1,0 +1,56 @@
+{
+  "productos": {
+    "Producto": [
+      "Pan Franc\u00e9s",
+      "Pan Integral",
+      "Croissant",
+      "Empanada",
+      "Torta Chocolate",
+      "Queque",
+      "Rosquitas",
+      "Pan Dulce"
+    ],
+    "Categoria": [
+      "Panes",
+      "Panes",
+      "Boller\u00eda",
+      "Salado",
+      "Tortas",
+      "Tortas",
+      "Dulces",
+      "Dulces"
+    ],
+    "Precio": [
+      0.3,
+      0.5,
+      2.5,
+      3.0,
+      25.0,
+      15.0,
+      1.5,
+      2.0
+    ]
+  },
+  "stock": [
+    {
+      "Local": "El Agustino",
+      "Producto": "Croissant",
+      "Stock_Actual": 80
+    }
+  ],
+  "ventas": [
+    {
+      "Fecha": "2025-06-13",
+      "Local": "El Agustino",
+      "Categoria": "Boller\u00eda",
+      "Producto": "Croissant",
+      "Cantidad": 20,
+      "Precio": 2.5,
+      "Venta": 50.0,
+      "Tipo_Pago": "Yape"
+    }
+  ],
+  "gastos": [],
+  "salidas": [],
+  "last_update": "2025-06-13T15:16:46.452720"
+}
