@@ -135,9 +135,14 @@ class SupabaseDB:
 # Inicializar DB
 @st.cache_resource
 def init_supabase():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
     return SupabaseDB(SUPABASE_URL, SUPABASE_KEY)
 
 db = init_supabase()
+
+if not db:
+    st.stop()
 
 # Configuraciones básicas
 LOCALES = ["El Agustino", "Carapongo", "SJL", "Santa Anita"]
