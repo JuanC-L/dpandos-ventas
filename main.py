@@ -4,7 +4,7 @@ from datetime import date, datetime
 import requests
 import json
 from dotenv import load_dotenv
-
+import os
 
 st.set_page_config(page_title="Registro de Ventas - Panadería", layout="wide")
 
