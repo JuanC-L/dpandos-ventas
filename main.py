@@ -4,7 +4,7 @@ from datetime import date, datetime
 import requests
 import json
 
-st.set_page_config(page_title="Registro de Ventas - Panadería", layout="wide")
+st.set_page_config(page_title="Registro de Ventas - D'Pandos", layout="wide")
 
 # Configuración de Supabase
 SUPABASE_URL = "https://tbzqbojmnbxhliblgoss.supabase.co"
@@ -143,7 +143,7 @@ def login_form():
     """Muestra el formulario de login"""
     st.markdown("""
     <div style="text-align: center; padding: 50px 0;">
-        <h1>🥖 Sistema de Panadería</h1>
+        <h1>🥖 Sistema D'Pandos</h1>
         <h3>Ingreso al Sistema</h3>
     </div>
     """, unsafe_allow_html=True)
@@ -166,15 +166,7 @@ def login_form():
                 else:
                     st.error("❌ Usuario o contraseña incorrectos")
         
-        st.markdown("---")
-        st.markdown("""
-        **Usuarios de prueba:**
-        - **admin** / admin123 (todos los locales)
-        - **agustino** / agu123 (El Agustino)
-        - **carapongo** / cara123 (Carapongo)
-        - **sjl** / sjl123 (SJL)
-        - **santaanita** / santa123 (Santa Anita)
-        """)
+
 
 def authenticate(usuario, password):
     """Autentica al usuario"""
@@ -224,7 +216,7 @@ MOTIVOS_SALIDA = ["Vencido", "Dañado", "Degustación", "Merma", "Donación", "O
 
 # SIDEBAR con información del usuario
 with st.sidebar:
-    st.title("🥖 Panaderías")
+    st.title("🥖 Locales")
     
     # Información del usuario
     st.markdown(f"👤 **Usuario:** {st.session_state.current_user}")
@@ -492,4 +484,4 @@ with tab5:
         st.info("📭 No hay ventas en el período seleccionado")
 
 st.markdown("---")
-st.caption(f"🥖 Sistema de Panadería v2.0 - Usuario: {st.session_state.current_user}")
+st.caption(f"🥖 Sistema de D'Pandos v2.0 - Usuario: {st.session_state.current_user}")
