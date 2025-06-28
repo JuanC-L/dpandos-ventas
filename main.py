@@ -12,63 +12,27 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 class SupabaseDB:
     def __init__(self, url, key):
-        # Debug: Verificar que los parámetros no sean None
-        if not url or not key:
-            st.error(f"Error de configuración: URL={url}, KEY={'[SET]' if key else '[NOT_SET]'}")
-            return
-            
         self.url = url
-        self.key = key
         self.headers = {
             "apikey": key,
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation"
         }
-        
-        # Test de conexión
-        self._test_connection()
-    
-    def _test_connection(self):
-        """Prueba la conexión con Supabase"""
-        try:
-            url = f"{self.url}/rest/v1/"
-            response = requests.get(url, headers=self.headers, timeout=10)
-            if response.status_code == 200:
-                st.success("✅ Conexión a Supabase establecida")
-            else:
-                st.warning(f"⚠️ Respuesta inesperada de Supabase: {response.status_code}")
-        except Exception as e:
-            st.error(f"❌ Error de conexión: {e}")
     
     def _make_request(self, method, endpoint, data=None):
         """Método centralizado para hacer requests"""
         try:
-            # Verificar que la URL esté configurada
-            if not self.url:
-                st.error("Error: URL de Supabase no configurada")
-                return False, None
-                
             url = f"{self.url}/rest/v1/{endpoint}"
-            
-            # Debug para mostrar la URL que se está usando
-            st.write(f"Debug: Haciendo {method} a {url}")
-            
-            response = requests.request(method, url, headers=self.headers, json=data, timeout=30)
+            response = requests.request(method, url, headers=self.headers, json=data)
             
             if response.status_code in [200, 201, 204]:
                 return True, response.json() if response.content else None
             else:
                 st.error(f"Error {response.status_code}: {response.text}")
                 return False, None
-        except requests.exceptions.Timeout:
-            st.error("❌ Timeout: La conexión tardó demasiado")
-            return False, None
-        except requests.exceptions.ConnectionError:
-            st.error("❌ Error de conexión: No se pudo conectar con Supabase")
-            return False, None
         except Exception as e:
-            st.error(f"❌ Error inesperado: {e}")
+            st.error(f"Error de conexión: {e}")
             return False, None
     
     def get_data(self, table, filters=None, select="*", order=None):
@@ -165,27 +129,16 @@ class SupabaseDB:
             "p_fecha_fin": fecha_fin
         })
 
-# Inicializar DB con manejo de errores mejorado
+# Inicializar DB
 @st.cache_resource
 def init_supabase():
-    try:
-        # Verificar que las constantes estén definidas
-        if not SUPABASE_URL or not SUPABASE_KEY:
-            st.error("❌ Configuración de Supabase incompleta")
-            return None
-        
-        db = SupabaseDB(SUPABASE_URL, SUPABASE_KEY)
-        return db
-    except Exception as e:
-        st.error(f"❌ Error inicializando Supabase: {e}")
+    if not SUPABASE_URL or not SUPABASE_KEY:
         return None
+    return SupabaseDB(SUPABASE_URL, SUPABASE_KEY)
 
-# Inicializar la base de datos
 db = init_supabase()
 
-# Verificar que la DB se haya inicializado correctamente
 if not db:
-    st.error("No se pudo inicializar la conexión a la base de datos")
     st.stop()
 
 # Configuraciones básicas
@@ -200,7 +153,6 @@ with st.sidebar:
     local = st.selectbox("Selecciona el local", LOCALES)
     if st.button("🔄 Refrescar", use_container_width=True):
         st.cache_data.clear()
-        st.cache_resource.clear()  # También limpiar el cache de recursos
         st.rerun()
 
 # TABS PRINCIPALES
@@ -212,62 +164,57 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.header("🛒 Registro de Ventas")
     
-    # Cargar productos con manejo de errores
-    try:
-        productos = db.get_productos()
-        if not productos:
-            st.warning("⚠️ No se encontraron productos en la base de datos")
-            st.info("Verificar que la tabla 'productos' tenga datos")
-        else:
-            productos_df = pd.DataFrame(productos)
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                fecha_venta = st.date_input("📅 Fecha", date.today(), key="fecha_venta")
-                categoria = st.selectbox("📋 Categoría", productos_df['categoria'].unique(), key="categoria_venta")
-            
-            with col2:
-                productos_cat = productos_df[productos_df['categoria'] == categoria]
-                producto = st.selectbox("🥖 Producto", productos_cat['producto'], key="producto_venta")
-                precio = float(productos_cat[productos_cat['producto'] == producto]['precio'].iloc[0])
-                st.info(f"💰 Precio: S/ {precio:.2f}")
-            
-            with col3:
-                stock_actual = db.get_stock_producto(local, producto)
-                st.success(f"📦 Stock: {int(stock_actual)}")
-                cantidad = st.number_input("🔢 Cantidad", min_value=0, max_value=int(stock_actual) if stock_actual > 0 else 100, key="cantidad_venta")
-                tipo_pago = st.selectbox("💳 Pago", TIPOS_PAGO, key="tipo_pago_venta")
-            
-            total = cantidad * precio
-            st.metric("💵 Total Venta", f"S/ {total:.2f}")
-            
-            if st.button("💾 Registrar Venta", type="primary", use_container_width=True):
-                if cantidad <= 0:
-                    st.warning("⚠️ Cantidad debe ser mayor a cero")
-                elif cantidad > stock_actual:
-                    st.error("❌ Stock insuficiente")
-                else:
-                    venta = {
-                        "fecha": fecha_venta.strftime("%Y-%m-%d"),
-                        "local": local,
-                        "categoria": categoria,
-                        "producto": producto,
-                        "cantidad": cantidad,
-                        "precio": precio,
-                        "venta": total,
-                        "tipo_pago": tipo_pago
-                    }
-                    
-                    result = db.registrar_venta(venta)
-                    if result and result.get('success'):
-                        st.success(f"✅ {result['message']} - Stock: {result['nuevo_stock']}")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {result.get('message', 'Error') if result else 'Error de conexión'}")
+    productos = db.get_productos()
+    if not productos:
+        st.error("No se pudieron cargar los productos")
+        st.stop()
     
-    except Exception as e:
-        st.error(f"❌ Error cargando productos: {e}")
+    productos_df = pd.DataFrame(productos)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        fecha_venta = st.date_input("📅 Fecha", date.today(), key="fecha_venta")
+        categoria = st.selectbox("📋 Categoría", productos_df['categoria'].unique(), key="categoria_venta")
+    
+    with col2:
+        productos_cat = productos_df[productos_df['categoria'] == categoria]
+        producto = st.selectbox("🥖 Producto", productos_cat['producto'], key="producto_venta")
+        precio = float(productos_cat[productos_cat['producto'] == producto]['precio'].iloc[0])
+        st.info(f"💰 Precio: S/ {precio:.2f}")
+    
+    with col3:
+        stock_actual = db.get_stock_producto(local, producto)
+        st.success(f"📦 Stock: {int(stock_actual)}")
+        cantidad = st.number_input("🔢 Cantidad", min_value=0, max_value=int(stock_actual) if stock_actual > 0 else 100, key="cantidad_venta")
+        tipo_pago = st.selectbox("💳 Pago", TIPOS_PAGO, key="tipo_pago_venta")
+    
+    total = cantidad * precio
+    st.metric("💵 Total Venta", f"S/ {total:.2f}")
+    
+    if st.button("💾 Registrar Venta", type="primary", use_container_width=True):
+        if cantidad <= 0:
+            st.warning("⚠️ Cantidad debe ser mayor a cero")
+        elif cantidad > stock_actual:
+            st.error("❌ Stock insuficiente")
+        else:
+            venta = {
+                "fecha": fecha_venta.strftime("%Y-%m-%d"),
+                "local": local,
+                "categoria": categoria,
+                "producto": producto,
+                "cantidad": cantidad,
+                "precio": precio,
+                "venta": total,
+                "tipo_pago": tipo_pago
+            }
+            
+            result = db.registrar_venta(venta)
+            if result and result.get('success'):
+                st.success(f"✅ {result['message']} - Stock: {result['nuevo_stock']}")
+                st.rerun()
+            else:
+                st.error(f"❌ {result.get('message', 'Error') if result else 'Error de conexión'}")
 
 # TAB 2: STOCK
 with tab2:
@@ -277,36 +224,28 @@ with tab2:
     
     with col1:
         st.subheader("🔄 Actualizar Stock")
-        try:
-            productos = db.get_productos()
-            if productos:
-                productos_df = pd.DataFrame(productos)
-                prod_stock = st.selectbox("🥖 Producto", productos_df['producto'].unique(), key="producto_stock")
-                nuevo_stock = st.number_input("📊 Nuevo Stock", min_value=0, key="nuevo_stock")
-                
-                if st.button("✅ Actualizar", type="primary"):
-                    result = db.actualizar_stock(local, prod_stock, nuevo_stock)
-                    if result and result.get('success'):
-                        st.success(f"✅ Stock actualizado: {result['stock_actual']}")
-                        st.rerun()
-                    else:
-                        st.error("❌ Error actualizando stock")
-            else:
-                st.warning("⚠️ No se pudieron cargar los productos")
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
+        productos = db.get_productos()
+        if productos:
+            productos_df = pd.DataFrame(productos)
+            prod_stock = st.selectbox("🥖 Producto", productos_df['producto'].unique(), key="producto_stock")
+            nuevo_stock = st.number_input("📊 Nuevo Stock", min_value=0, key="nuevo_stock")
+            
+            if st.button("✅ Actualizar", type="primary"):
+                result = db.actualizar_stock(local, prod_stock, nuevo_stock)
+                if result and result.get('success'):
+                    st.success(f"✅ Stock actualizado: {result['stock_actual']}")
+                    st.rerun()
+                else:
+                    st.error("❌ Error actualizando stock")
     
     with col2:
         st.subheader("📋 Stock Actual")
-        try:
-            stock_data = db.get_stock_local(local)
-            if stock_data:
-                stock_df = pd.DataFrame(stock_data)
-                st.dataframe(stock_df, use_container_width=True)
-            else:
-                st.info("📭 No hay stock registrado")
-        except Exception as e:
-            st.error(f"❌ Error cargando stock: {e}")
+        stock_data = db.get_stock_local(local)
+        if stock_data:
+            stock_df = pd.DataFrame(stock_data)
+            st.dataframe(stock_df, use_container_width=True)
+        else:
+            st.info("📭 No hay stock registrado")
 
 # TAB 3: GASTOS
 with tab3:
@@ -330,30 +269,24 @@ with tab3:
                     "descripcion": descripcion,
                     "monto": monto
                 }
-                try:
-                    result = db.registrar_gasto(gasto)
-                    if result:
-                        st.success("✅ Gasto registrado")
-                        st.rerun()
-                    else:
-                        st.error("❌ Error registrando gasto")
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                result = db.registrar_gasto(gasto)
+                if result:
+                    st.success("✅ Gasto registrado")
+                    st.rerun()
+                else:
+                    st.error("❌ Error registrando gasto")
             else:
                 st.warning("⚠️ Ingrese descripción")
     
     with col2:
         st.subheader("📋 Gastos Registrados")
-        try:
-            gastos = db.get_gastos_local(local)
-            if gastos:
-                gastos_df = pd.DataFrame(gastos)
-                st.dataframe(gastos_df, use_container_width=True)
-                st.metric("💸 Total Gastos", f"S/ {gastos_df['monto'].sum():.2f}")
-            else:
-                st.info("📭 No hay gastos registrados")
-        except Exception as e:
-            st.error(f"❌ Error cargando gastos: {e}")
+        gastos = db.get_gastos_local(local)
+        if gastos:
+            gastos_df = pd.DataFrame(gastos)
+            st.dataframe(gastos_df, use_container_width=True)
+            st.metric("💸 Total Gastos", f"S/ {gastos_df['monto'].sum():.2f}")
+        else:
+            st.info("📭 No hay gastos registrados")
 
 # TAB 4: SALIDAS
 with tab4:
@@ -363,55 +296,47 @@ with tab4:
     
     with col1:
         st.subheader("➖ Nueva Salida")
-        try:
-            productos = db.get_productos()
-            if productos:
-                productos_df = pd.DataFrame(productos)
-                fecha_salida = st.date_input("📅 Fecha", date.today(), key="fecha_salida")
-                producto_salida = st.selectbox("🥖 Producto", productos_df['producto'].unique(), key="producto_salida")
-                
-                stock_disponible = db.get_stock_producto(local, producto_salida)
-                st.info(f"📦 Stock disponible: {int(stock_disponible)}")
-                
-                cantidad_salida = st.number_input("🔢 Cantidad", min_value=1, max_value=int(stock_disponible) if stock_disponible > 0 else 1, key="cantidad_salida")
-                motivo = st.selectbox("📋 Motivo", MOTIVOS_SALIDA, key="motivo_salida")
-                observaciones = st.text_area("📝 Observaciones", key="observaciones_salida")
-                
-                if st.button("📤 Registrar Salida", type="primary"):
-                    if cantidad_salida > stock_disponible:
-                        st.error("❌ Stock insuficiente")
+        productos = db.get_productos()
+        if productos:
+            productos_df = pd.DataFrame(productos)
+            fecha_salida = st.date_input("📅 Fecha", date.today(), key="fecha_salida")
+            producto_salida = st.selectbox("🥖 Producto", productos_df['producto'].unique(), key="producto_salida")
+            
+            stock_disponible = db.get_stock_producto(local, producto_salida)
+            st.info(f"📦 Stock disponible: {int(stock_disponible)}")
+            
+            cantidad_salida = st.number_input("🔢 Cantidad", min_value=1, max_value=int(stock_disponible) if stock_disponible > 0 else 1, key="cantidad_salida")
+            motivo = st.selectbox("📋 Motivo", MOTIVOS_SALIDA, key="motivo_salida")
+            observaciones = st.text_area("📝 Observaciones", key="observaciones_salida")
+            
+            if st.button("📤 Registrar Salida", type="primary"):
+                if cantidad_salida > stock_disponible:
+                    st.error("❌ Stock insuficiente")
+                else:
+                    salida = {
+                        "fecha": fecha_salida.strftime("%Y-%m-%d"),
+                        "local": local,
+                        "producto": producto_salida,
+                        "cantidad": cantidad_salida,
+                        "motivo": motivo,
+                        "observaciones": observaciones
+                    }
+                    
+                    result = db.registrar_salida(salida)
+                    if result and result.get('success'):
+                        st.success(f"✅ {result['message']} - Stock: {result['nuevo_stock']}")
+                        st.rerun()
                     else:
-                        salida = {
-                            "fecha": fecha_salida.strftime("%Y-%m-%d"),
-                            "local": local,
-                            "producto": producto_salida,
-                            "cantidad": cantidad_salida,
-                            "motivo": motivo,
-                            "observaciones": observaciones
-                        }
-                        
-                        result = db.registrar_salida(salida)
-                        if result and result.get('success'):
-                            st.success(f"✅ {result['message']} - Stock: {result['nuevo_stock']}")
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {result.get('message', 'Error') if result else 'Error de conexión'}")
-            else:
-                st.warning("⚠️ No se pudieron cargar los productos")
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
+                        st.error(f"❌ {result.get('message', 'Error') if result else 'Error de conexión'}")
     
     with col2:
         st.subheader("📋 Historial Salidas")
-        try:
-            salidas = db.get_salidas_local(local)
-            if salidas:
-                salidas_df = pd.DataFrame(salidas)
-                st.dataframe(salidas_df, use_container_width=True)
-            else:
-                st.info("📭 No hay salidas registradas")
-        except Exception as e:
-            st.error(f"❌ Error cargando salidas: {e}")
+        salidas = db.get_salidas_local(local)
+        if salidas:
+            salidas_df = pd.DataFrame(salidas)
+            st.dataframe(salidas_df, use_container_width=True)
+        else:
+            st.info("📭 No hay salidas registradas")
 
 # TAB 5: DASHBOARD
 with tab5:
@@ -423,55 +348,49 @@ with tab5:
     with col2:
         fecha_fin = st.date_input("📅 Hasta", date.today())
     
-    try:
-        # Obtener datos del dashboard
-        dashboard_data = db.get_dashboard_data(local, fecha_inicio.strftime("%Y-%m-%d"), fecha_fin.strftime("%Y-%m-%d"))
-        
-        if dashboard_data and len(dashboard_data) > 0:
-            data = dashboard_data[0] if isinstance(dashboard_data, list) else dashboard_data
-            total_ventas = float(data.get('total_ventas', 0) or 0)
-            total_gastos = float(data.get('total_gastos', 0) or 0)
-            total_unidades = int(data.get('total_unidades', 0) or 0)
-            ganancia_neta = float(data.get('ganancia_neta', 0) or 0)
-        else:
-            total_ventas = total_gastos = ganancia_neta = 0
-            total_unidades = 0
-        
-        # Métricas
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("💰 Ventas", f"S/ {total_ventas:.2f}")
-        with col2:
-            st.metric("💸 Gastos", f"S/ {total_gastos:.2f}")
-        with col3:
-            st.metric("📈 Ganancia", f"S/ {ganancia_neta:.2f}")
-        with col4:
-            st.metric("📦 Unidades", f"{total_unidades}")
-        
-        # Gráficos
-        ventas_data = db.get_ventas_local(local, fecha_inicio.strftime("%Y-%m-%d"), fecha_fin.strftime("%Y-%m-%d"))
-        
-        if ventas_data:
-            ventas_df = pd.DataFrame(ventas_data)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("🥖 Ventas por Producto")
-                ventas_producto = ventas_df.groupby('producto')['venta'].sum().sort_values(ascending=False)
-                st.bar_chart(ventas_producto)
-            
-            with col2:
-                st.subheader("💳 Ventas por Tipo de Pago")
-                ventas_pago = ventas_df.groupby('tipo_pago')['venta'].sum()
-                st.bar_chart(ventas_pago)
-            
-            st.subheader("📋 Detalle de Ventas")
-            st.dataframe(ventas_df, use_container_width=True)
-        else:
-            st.info("📭 No hay ventas en el período seleccionado")
+    # Obtener datos del dashboard
+    dashboard_data = db.get_dashboard_data(local, fecha_inicio.strftime("%Y-%m-%d"), fecha_fin.strftime("%Y-%m-%d"))
     
-    except Exception as e:
-        st.error(f"❌ Error cargando dashboard: {e}")
+    if dashboard_data and len(dashboard_data) > 0:
+        data = dashboard_data[0] if isinstance(dashboard_data, list) else dashboard_data
+        total_ventas = float(data.get('total_ventas', 0) or 0)
+        total_gastos = float(data.get('total_gastos', 0) or 0)
+        total_unidades = int(data.get('total_unidades', 0) or 0)
+        ganancia_neta = float(data.get('ganancia_neta', 0) or 0)
+    else:
+        total_ventas = total_gastos = ganancia_neta = 0
+        total_unidades = 0
+    
+    # Métricas
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("💰 Ventas", f"S/ {total_ventas:.2f}")
+    with col2:
+        st.metric("💸 Gastos", f"S/ {total_gastos:.2f}")
+    with col3:
+        st.metric("📈 Ganancia", f"S/ {ganancia_neta:.2f}")
+    with col4:
+        st.metric("📦 Unidades", f"{total_unidades}")
+    
+    # Gráficos
+    ventas_data = db.get_ventas_local(local, fecha_inicio.strftime("%Y-%m-%d"), fecha_fin.strftime("%Y-%m-%d"))
+    
+    if ventas_data:
+        ventas_df = pd.DataFrame(ventas_data)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("🥖 Ventas por Producto")
+            ventas_producto = ventas_df.groupby('producto')['venta'].sum().sort_values(ascending=False)
+            st.bar_chart(ventas_producto)
+        
+        with col2:
+            st.subheader("💳 Ventas por Tipo de Pago")
+            ventas_pago = ventas_df.groupby('tipo_pago')['venta'].sum()
+            st.bar_chart(ventas_pago)
+        
+        st.subheader("📋 Detalle de Ventas")
+        st.dataframe(ventas_df, use_container_width=True)
+    else:
+        st.info("📭 No hay ventas en el período seleccionado")
 
-st.markdown("---")
-st.caption("🥖 Sistema de Panadería v2.0")
