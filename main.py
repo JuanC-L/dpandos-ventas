@@ -10,6 +10,15 @@ st.set_page_config(page_title="Registro de Ventas - Panadería", layout="wide")
 SUPABASE_URL = "https://tbzqbojmnbxhliblgoss.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRienFib2ptbmJ4aGxpYmxnb3NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4NDYwNzIsImV4cCI6MjA2NTQyMjA3Mn0.Q_wK9y4aM2ARIeKQ2DoXu5JyFOqh5dbdlYqtYx52Kbc"
 
+# Configuración de usuarios y locales
+USUARIOS = {
+    "admin": {"password": "admin123", "locales": ["El Agustino", "Carapongo", "SJL", "Santa Anita"]},
+    "agustino": {"password": "agu123", "locales": ["El Agustino"]},
+    "carapongo": {"password": "cara123", "locales": ["Carapongo"]},
+    "sjl": {"password": "sjl123", "locales": ["SJL"]},
+    "santaanita": {"password": "santa123", "locales": ["Santa Anita"]}
+}
+
 class SupabaseDB:
     def __init__(self, url, key):
         self.url = url
@@ -129,6 +138,72 @@ class SupabaseDB:
             "p_fecha_fin": fecha_fin
         })
 
+# Funciones de autenticación
+def login_form():
+    """Muestra el formulario de login"""
+    st.markdown("""
+    <div style="text-align: center; padding: 50px 0;">
+        <h1>🥖 Sistema de Panadería</h1>
+        <h3>Ingreso al Sistema</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        with st.form("login_form"):
+            usuario = st.text_input("👤 Usuario", placeholder="Ingrese su usuario")
+            password = st.text_input("🔐 Contraseña", type="password", placeholder="Ingrese su contraseña")
+            submit = st.form_submit_button("🚪 Ingresar", use_container_width=True, type="primary")
+            
+            if submit:
+                if authenticate(usuario, password):
+                    st.session_state.authenticated = True
+                    st.session_state.current_user = usuario
+                    st.session_state.user_locales = USUARIOS[usuario]["locales"]
+                    st.success("✅ Login exitoso")
+                    st.rerun()
+                else:
+                    st.error("❌ Usuario o contraseña incorrectos")
+        
+        st.markdown("---")
+        st.markdown("""
+        **Usuarios de prueba:**
+        - **admin** / admin123 (todos los locales)
+        - **agustino** / agu123 (El Agustino)
+        - **carapongo** / cara123 (Carapongo)
+        - **sjl** / sjl123 (SJL)
+        - **santaanita** / santa123 (Santa Anita)
+        """)
+
+def authenticate(usuario, password):
+    """Autentica al usuario"""
+    if usuario in USUARIOS:
+        return USUARIOS[usuario]["password"] == password
+    return False
+
+def logout():
+    """Cierra sesión"""
+    st.session_state.authenticated = False
+    st.session_state.current_user = None
+    st.session_state.user_locales = []
+    if 'local_selected' in st.session_state:
+        del st.session_state.local_selected
+    st.rerun()
+
+# Inicializar variables de sesión
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = None
+if 'user_locales' not in st.session_state:
+    st.session_state.user_locales = []
+
+# Verificar autenticación
+if not st.session_state.authenticated:
+    login_form()
+    st.stop()
+
 # Inicializar DB
 @st.cache_resource
 def init_supabase():
@@ -139,21 +214,43 @@ def init_supabase():
 db = init_supabase()
 
 if not db:
+    st.error("❌ Error conectando a la base de datos")
     st.stop()
 
 # Configuraciones básicas
-LOCALES = ["El Agustino", "Carapongo", "SJL", "Santa Anita"]
 TIPOS_PAGO = ["Yape", "Tarjeta", "Efectivo", "Varios"]
 TIPOS_GASTO = ["Insumos", "Servicios", "Personal", "Alquiler", "Transporte", "Otros"]
 MOTIVOS_SALIDA = ["Vencido", "Dañado", "Degustación", "Merma", "Donación", "Otros"]
 
-# SIDEBAR
+# SIDEBAR con información del usuario
 with st.sidebar:
     st.title("🥖 Panaderías")
-    local = st.selectbox("Selecciona el local", LOCALES)
-    if st.button("🔄 Refrescar", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+    
+    # Información del usuario
+    st.markdown(f"👤 **Usuario:** {st.session_state.current_user}")
+    
+    # Selector de local basado en permisos del usuario
+    if len(st.session_state.user_locales) == 1:
+        local = st.session_state.user_locales[0]
+        st.info(f"📍 **Local:** {local}")
+    else:
+        local = st.selectbox("📍 Selecciona el local", st.session_state.user_locales, key="local_selector")
+    
+    # Botones de acción
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refrescar", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+    with col2:
+        if st.button("🚪 Salir", use_container_width=True):
+            logout()
+    
+    # Información adicional
+    st.markdown("---")
+    st.markdown(f"**Locales disponibles:**")
+    for loc in st.session_state.user_locales:
+        st.markdown(f"• {loc}")
 
 # TABS PRINCIPALES
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -162,7 +259,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 # TAB 1: VENTAS
 with tab1:
-    st.header("🛒 Registro de Ventas")
+    st.header(f"🛒 Registro de Ventas - {local}")
     
     productos = db.get_productos()
     if not productos:
@@ -218,7 +315,7 @@ with tab1:
 
 # TAB 2: STOCK
 with tab2:
-    st.header("📦 Gestión de Stock")
+    st.header(f"📦 Gestión de Stock - {local}")
     
     col1, col2 = st.columns(2)
     
@@ -249,7 +346,7 @@ with tab2:
 
 # TAB 3: GASTOS
 with tab3:
-    st.header("💰 Gastos Diarios")
+    st.header(f"💰 Gastos Diarios - {local}")
     
     col1, col2 = st.columns(2)
     
@@ -290,7 +387,7 @@ with tab3:
 
 # TAB 4: SALIDAS
 with tab4:
-    st.header("📉 Salidas y Mermas")
+    st.header(f"📉 Salidas y Mermas - {local}")
     
     col1, col2 = st.columns(2)
     
@@ -340,7 +437,7 @@ with tab4:
 
 # TAB 5: DASHBOARD
 with tab5:
-    st.header("📊 Dashboard")
+    st.header(f"📊 Dashboard - {local}")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -394,3 +491,5 @@ with tab5:
     else:
         st.info("📭 No hay ventas en el período seleccionado")
 
+st.markdown("---")
+st.caption(f"🥖 Sistema de Panadería v2.0 - Usuario: {st.session_state.current_user}")
